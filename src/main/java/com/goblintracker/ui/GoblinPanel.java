@@ -83,7 +83,7 @@ public class GoblinPanel extends PluginPanel
 		setBorder(new EmptyBorder(6, 6, 6, 6));
 		buildOverviewTab();
 		installTabUi();
-		tabs.setTabLayoutPolicy(JTabbedPane.SCROLL_TAB_LAYOUT);
+		tabs.setTabLayoutPolicy(JTabbedPane.WRAP_TAB_LAYOUT);
 
 		tabs.addTab("", overviewTab);
 		tabs.addTab("", wrapArea(areasArea));
@@ -273,17 +273,51 @@ public class GoblinPanel extends PluginPanel
 
 	private String buildLootText(WarToneMode toneMode)
 	{
-		Map<Integer, Long> lootTotals = plugin.getLootTotals();
-		if (lootTotals.isEmpty())
+		Map<Integer, Long> todayLootTotals = sanitizeLootTotals(plugin.getTodayLootTotals());
+		Map<Integer, Long> overallLootTotals = sanitizeLootTotals(plugin.getLifetimeLootTotals());
+
+		if (todayLootTotals.isEmpty() && overallLootTotals.isEmpty())
+		{
+			Map<Integer, Long> fallbackTotals = sanitizeLootTotals(plugin.getLootTotals());
+			overallLootTotals = fallbackTotals;
+		}
+
+		if (todayLootTotals.isEmpty() && overallLootTotals.isEmpty())
 		{
 			return WarBranding.emptyLootText(toneMode);
 		}
 
+		StringBuilder text = new StringBuilder();
+		text.append("=== Today's Loot ===\n");
+		text.append(formatLootLines(todayLootTotals));
+		text.append("\n\n=== Overall Loot ===\n");
+		text.append(formatLootLines(overallLootTotals));
+		return text.toString();
+	}
+
+	private String formatLootLines(Map<Integer, Long> lootTotals)
+	{
+		if (lootTotals.isEmpty())
+		{
+			return "No loot recorded.";
+		}
+
 		return lootTotals.entrySet().stream()
 			.sorted(Map.Entry.<Integer, Long>comparingByValue().reversed())
-			.limit(25)
 			.map(entry -> plugin.getItemName(entry.getKey()) + " (" + entry.getKey() + "): " + entry.getValue())
 			.collect(Collectors.joining("\n"));
+	}
+
+	private static Map<Integer, Long> sanitizeLootTotals(Map<Integer, Long> lootTotals)
+	{
+		if (lootTotals == null || lootTotals.isEmpty())
+		{
+			return Map.of();
+		}
+
+		return lootTotals.entrySet().stream()
+			.filter(entry -> entry != null && entry.getKey() != null && entry.getValue() != null && entry.getValue() > 0)
+			.collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, Long::sum));
 	}
 
 	private String buildHistoryText(WarToneMode toneMode)
@@ -514,6 +548,13 @@ public class GoblinPanel extends PluginPanel
 			protected int getTabLabelShiftY(int tabPlacement, int tabIndex, boolean isSelected)
 			{
 				return 0;
+			}
+
+			@Override
+			protected boolean shouldRotateTabRuns(int tabPlacement)
+			{
+				// Keep visual tab order stable when selecting tabs.
+				return false;
 			}
 
 			@Override

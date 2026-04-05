@@ -18,8 +18,12 @@ import com.goblintracker.ui.GoblinMilestoneNotifier;
 import com.goblintracker.ui.GoblinNavigation;
 import com.goblintracker.ui.GoblinPanel;
 import java.lang.reflect.Field;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.ArgumentMatchers;
 import net.runelite.api.Client;
 import net.runelite.api.GameState;
 import net.runelite.api.NPC;
@@ -76,6 +80,7 @@ public class GoblinKillTrackerPluginTest
 		when(config.showOverlay()).thenReturn(true);
 		when(config.useDespawnFallback()).thenReturn(false);
 		when(config.showSidebar()).thenReturn(false);
+		when(config.dataFilePath()).thenReturn("");
 		when(config.includeNpcIds()).thenReturn("");
 		when(config.excludeNpcNames()).thenReturn("");
 		when(areaResolver.resolveArea(goblin)).thenReturn("Lumbridge");
@@ -90,6 +95,8 @@ public class GoblinKillTrackerPluginTest
 		when(chicken.getId()).thenReturn(2001);
 		when(chicken.getIndex()).thenReturn(456);
 		when(statsRepository.loadLifetimeKills()).thenReturn(0);
+		when(statsRepository.loadLifetimeLootTotals()).thenReturn(Map.of());
+		when(statsRepository.loadTodayLootTotals(ArgumentMatchers.anyString())).thenReturn(Map.of());
 
 		setField(plugin, "client", client);
 		setField(plugin, "config", config);
@@ -257,6 +264,61 @@ public class GoblinKillTrackerPluginTest
 		assertEquals(0, plugin.getTripGoblinKills());
 		assertEquals(3, plugin.getLifetimeGoblinKills());
 		verify(configManager).setConfiguration("goblinkilltracker", "resetTripCount", false);
+	}
+
+	@Test
+	public void configResetAllToggleClearsAllAndTurnsItselfBackOff() throws Exception
+	{
+		when(statsRepository.loadLifetimeKills()).thenReturn(2);
+		plugin.startUp();
+		plugin.handleLootNpc(goblin);
+
+		ConfigChanged configChanged = new ConfigChanged();
+		configChanged.setGroup("goblinkilltracker");
+		configChanged.setKey("resetAllCount");
+		configChanged.setNewValue("true");
+
+		plugin.onConfigChanged(configChanged);
+
+		assertEquals(0, plugin.getSessionGoblinKills());
+		assertEquals(0, plugin.getTripGoblinKills());
+		assertEquals(0, plugin.getLifetimeGoblinKills());
+		verify(statsRepository).saveLifetimeKills(0);
+		verify(configManager).setConfiguration("goblinkilltracker", "resetAllCount", false);
+	}
+
+	@Test
+	public void exportThenImportRestoresLifetimeKills() throws Exception
+	{
+		Path tempExport = Files.createTempFile("goblin-ledger-test", ".properties");
+		Files.deleteIfExists(tempExport);
+		when(config.dataFilePath()).thenReturn(tempExport.toString());
+		when(statsRepository.loadLifetimeKills()).thenReturn(11);
+
+		plugin.startUp();
+
+		ConfigChanged exportChanged = new ConfigChanged();
+		exportChanged.setGroup("goblinkilltracker");
+		exportChanged.setKey("exportData");
+		exportChanged.setNewValue("true");
+		plugin.onConfigChanged(exportChanged);
+
+		assertTrue(Files.exists(tempExport));
+
+		plugin.resetAllCount();
+		assertEquals(0, plugin.getLifetimeGoblinKills());
+
+		ConfigChanged importChanged = new ConfigChanged();
+		importChanged.setGroup("goblinkilltracker");
+		importChanged.setKey("importData");
+		importChanged.setNewValue("true");
+		plugin.onConfigChanged(importChanged);
+
+		assertEquals(11, plugin.getLifetimeGoblinKills());
+		verify(configManager).setConfiguration("goblinkilltracker", "exportData", false);
+		verify(configManager).setConfiguration("goblinkilltracker", "importData", false);
+
+		Files.deleteIfExists(tempExport);
 	}
 
 	@Test

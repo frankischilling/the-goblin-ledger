@@ -17,7 +17,8 @@ public class GoblinStatsState
 	private long sessionStartedAtMs;
 	private long tripStartedAtMs;
 	private final Map<String, Integer> areaKillCounts = new HashMap<>();
-	private final Map<Integer, Long> lootTotals = new HashMap<>();
+	private final Map<Integer, Long> todayLootTotals = new HashMap<>();
+	private final Map<Integer, Long> lifetimeLootTotals = new HashMap<>();
 	private final Deque<GoblinKillRecord> recentKills = new ArrayDeque<>();
 
 	public GoblinStatsState()
@@ -36,13 +37,26 @@ public class GoblinStatsState
 		sessionStartedAtMs = now;
 		tripStartedAtMs = now;
 		areaKillCounts.clear();
-		lootTotals.clear();
+		todayLootTotals.clear();
+		lifetimeLootTotals.clear();
 		recentKills.clear();
 	}
 
 	public void setLifetimeKills(int lifetimeKills)
 	{
 		this.lifetimeKills = Math.max(0, lifetimeKills);
+	}
+
+	public void setTodayLootTotals(Map<Integer, Long> lootTotals)
+	{
+		todayLootTotals.clear();
+		mergeLoot(todayLootTotals, lootTotals);
+	}
+
+	public void setLifetimeLootTotals(Map<Integer, Long> lootTotals)
+	{
+		lifetimeLootTotals.clear();
+		mergeLoot(lifetimeLootTotals, lootTotals);
 	}
 
 	public void incrementKill()
@@ -63,10 +77,8 @@ public class GoblinStatsState
 
 		if (killLootTotals != null)
 		{
-			for (Map.Entry<Integer, Long> entry : killLootTotals.entrySet())
-			{
-				lootTotals.merge(entry.getKey(), Math.max(0L, entry.getValue()), Long::sum);
-			}
+			mergeLoot(todayLootTotals, killLootTotals);
+			mergeLoot(lifetimeLootTotals, killLootTotals);
 		}
 
 		recentKills.addFirst(killRecord);
@@ -122,11 +134,39 @@ public class GoblinStatsState
 
 	public Map<Integer, Long> getLootTotals()
 	{
-		return new HashMap<>(lootTotals);
+		return getLifetimeLootTotals();
+	}
+
+	public Map<Integer, Long> getTodayLootTotals()
+	{
+		return new HashMap<>(todayLootTotals);
+	}
+
+	public Map<Integer, Long> getLifetimeLootTotals()
+	{
+		return new HashMap<>(lifetimeLootTotals);
 	}
 
 	public List<GoblinKillRecord> getRecentKills()
 	{
 		return new ArrayList<>(recentKills);
+	}
+
+	private static void mergeLoot(Map<Integer, Long> destination, Map<Integer, Long> source)
+	{
+		if (source == null || source.isEmpty())
+		{
+			return;
+		}
+
+		for (Map.Entry<Integer, Long> entry : source.entrySet())
+		{
+			if (entry == null || entry.getKey() == null)
+			{
+				continue;
+			}
+
+			destination.merge(entry.getKey(), Math.max(0L, entry.getValue() == null ? 0L : entry.getValue()), Long::sum);
+		}
 	}
 }

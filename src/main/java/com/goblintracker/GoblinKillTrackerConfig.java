@@ -195,4 +195,48 @@ public interface GoblinKillTrackerConfig extends Config
 	{
 		return 25;
 	}
+
+	@ConfigItem(
+		keyName = "dataFilePath",
+		name = "Data file path",
+		description = "File path for export/import (relative paths resolve under your home folder)",
+		position = 17
+	)
+	default String dataFilePath()
+	{
+		return "goblin-ledger-data.properties";
+	}
+
+	@ConfigItem(
+		keyName = "exportData",
+		name = "Export data",
+		description = "Toggle on to export counters and loot data to the configured file",
+		position = 18
+	)
+	default boolean exportData()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "importData",
+		name = "Import data",
+		description = "Toggle on to load counters and loot data from the configured file",
+		position = 19
+	)
+	default boolean importData()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+		keyName = "resetAllCount",
+		name = "Reset all counters",
+		description = "Toggle on to reset session/trip/lifetime kills and loot history",
+		position = 20
+	)
+	default boolean resetAllCount()
+	{
+		return false;
+	}
 }
