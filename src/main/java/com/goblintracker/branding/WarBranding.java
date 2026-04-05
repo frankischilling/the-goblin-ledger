@@ -550,6 +550,11 @@ public final class WarBranding
 		return lines.get(index);
 	}
 
+	public static int[] milestoneTargets()
+	{
+		return MILESTONE_TARGETS.clone();
+	}
+
 	public static List<String> unlockedMilestones(int lifetimeKills)
 	{
 		int boundedKills = Math.max(0, lifetimeKills);

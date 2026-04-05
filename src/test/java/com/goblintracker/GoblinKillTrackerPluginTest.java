@@ -97,6 +97,7 @@ public class GoblinKillTrackerPluginTest
 		when(statsRepository.loadLifetimeKills()).thenReturn(0);
 		when(statsRepository.loadLifetimeLootTotals()).thenReturn(Map.of());
 		when(statsRepository.loadTodayLootTotals(ArgumentMatchers.anyString())).thenReturn(Map.of());
+		when(statsRepository.loadMilestoneReachedAtMs()).thenReturn(Map.of());
 
 		setField(plugin, "client", client);
 		setField(plugin, "config", config);
@@ -138,6 +139,18 @@ public class GoblinKillTrackerPluginTest
 		assertEquals(1, plugin.getLifetimeGoblinKills());
 		assertEquals(1, plugin.getRecentKills().size());
 		verify(statsRepository).saveLifetimeKills(1);
+	}
+
+	@Test
+	public void handleLootNpcCrossingMilestonePersistsReachedTimestamp() throws Exception
+	{
+		when(statsRepository.loadLifetimeKills()).thenReturn(99);
+		plugin.startUp();
+
+		plugin.handleLootNpc(goblin);
+
+		verify(statsRepository).saveMilestoneReachedAtMs(ArgumentMatchers.argThat(times ->
+			times != null && times.containsKey(100) && times.get(100) != null && times.get(100) > 0L));
 	}
 
 	@Test

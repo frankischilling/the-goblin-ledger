@@ -5,6 +5,7 @@ import com.goblintracker.detection.DefaultGoblinTargetMatcher;
 import com.goblintracker.detection.GoblinAreaResolver;
 import com.goblintracker.detection.GoblinKillService;
 import com.goblintracker.detection.GoblinTargetMatcher;
+import com.goblintracker.branding.WarBranding;
 import com.goblintracker.model.GoblinKillRecord;
 import com.goblintracker.model.GoblinStatsState;
 import com.goblintracker.persistence.ConfigGoblinStatsRepository;
@@ -19,6 +20,7 @@ import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Collection;
 import java.util.HashMap;
@@ -65,6 +67,7 @@ public class GoblinKillTrackerPlugin extends Plugin
 	private static final String EXPORT_LOOT_DATE_KEY = "lootDate";
 	private static final String EXPORT_TODAY_LOOT_KEY = "todayLootTotals";
 	private static final String EXPORT_LIFETIME_LOOT_KEY = "lifetimeLootTotals";
+	private static final String EXPORT_MILESTONE_TIMES_KEY = "milestoneReachedAtMs";
 
 	@Inject
 	private Client client;
@@ -195,6 +198,7 @@ public class GoblinKillTrackerPlugin extends Plugin
 			statsState.setLifetimeKills(0);
 			statsState.setTodayLootTotals(Map.of());
 			statsState.setLifetimeLootTotals(Map.of());
+			statsState.setMilestoneReachedAtMs(Map.of());
 			killService.clear();
 			resetSessionOnNextLogin = true;
 		}
@@ -282,6 +286,7 @@ public class GoblinKillTrackerPlugin extends Plugin
 			statsState.setLifetimeKills(0);
 			statsState.setTodayLootTotals(Map.of());
 			statsState.setLifetimeLootTotals(Map.of());
+			statsState.setMilestoneReachedAtMs(Map.of());
 			milestoneNotifier.reset(0);
 			refreshUi();
 			return;
@@ -290,6 +295,7 @@ public class GoblinKillTrackerPlugin extends Plugin
 		activeProfileName = localPlayer.getName();
 		statsState.setLifetimeKills(statsRepository.loadLifetimeKills());
 		statsState.setLifetimeLootTotals(statsRepository.loadLifetimeLootTotals());
+		statsState.setMilestoneReachedAtMs(statsRepository.loadMilestoneReachedAtMs());
 		activeLootDate = currentDateKey();
 		statsState.setTodayLootTotals(statsRepository.loadTodayLootTotals(activeLootDate));
 		milestoneNotifier.reset(statsState.getLifetimeKills());
@@ -320,6 +326,7 @@ public class GoblinKillTrackerPlugin extends Plugin
 			statsRepository.saveLifetimeKills(0);
 			statsRepository.saveLifetimeLootTotals(Map.of());
 			statsRepository.saveTodayLootTotals(activeLootDate, Map.of());
+			statsRepository.saveMilestoneReachedAtMs(Map.of());
 		}
 
 		refreshUi();
@@ -370,6 +377,11 @@ public class GoblinKillTrackerPlugin extends Plugin
 		return statsState.getLifetimeLootTotals();
 	}
 
+	public Map<Integer, Long> getMilestoneReachedAtMs()
+	{
+		return statsState.getMilestoneReachedAtMs();
+	}
+
 	public List<GoblinKillRecord> getRecentKills()
 	{
 		return statsState.getRecentKills();
@@ -414,13 +426,16 @@ public class GoblinKillTrackerPlugin extends Plugin
 	private void applyKillRecord(GoblinKillRecord killRecord, Map<Integer, Long> lootTotals)
 	{
 		ensureTodayLootBucket();
+		int previousLifetimeKills = statsState.getLifetimeKills();
 		statsState.recordKill(killRecord, lootTotals);
+		stampMilestoneReachedTimes(previousLifetimeKills, statsState.getLifetimeKills(), killRecord == null ? null : killRecord.getTimestamp());
 
 		if (hasActiveProfile())
 		{
 			statsRepository.saveLifetimeKills(statsState.getLifetimeKills());
 			statsRepository.saveLifetimeLootTotals(statsState.getLifetimeLootTotals());
 			statsRepository.saveTodayLootTotals(activeLootDate, statsState.getTodayLootTotals());
+			statsRepository.saveMilestoneReachedAtMs(statsState.getMilestoneReachedAtMs());
 		}
 
 		if (milestoneNotifier.checkAndNotify(statsState.getLifetimeKills()))
@@ -520,6 +535,23 @@ public class GoblinKillTrackerPlugin extends Plugin
 		panel.refresh();
 	}
 
+	private void stampMilestoneReachedTimes(int previousLifetimeKills, int currentLifetimeKills, Instant killTimestamp)
+	{
+		if (currentLifetimeKills <= previousLifetimeKills)
+		{
+			return;
+		}
+
+		long reachedAtMs = (killTimestamp == null ? Instant.now() : killTimestamp).toEpochMilli();
+		for (int target : WarBranding.milestoneTargets())
+		{
+			if (target > previousLifetimeKills && target <= currentLifetimeKills)
+			{
+				statsState.recordMilestoneReachedAt(target, reachedAtMs);
+			}
+		}
+	}
+
 	private void exportDataFile()
 	{
 		ensureTodayLootBucket();
@@ -538,6 +570,7 @@ public class GoblinKillTrackerPlugin extends Plugin
 			properties.setProperty(EXPORT_LOOT_DATE_KEY, activeLootDate == null ? currentDateKey() : activeLootDate);
 			properties.setProperty(EXPORT_TODAY_LOOT_KEY, serializeLootTotals(statsState.getTodayLootTotals()));
 			properties.setProperty(EXPORT_LIFETIME_LOOT_KEY, serializeLootTotals(statsState.getLifetimeLootTotals()));
+			properties.setProperty(EXPORT_MILESTONE_TIMES_KEY, serializeLootTotals(statsState.getMilestoneReachedAtMs()));
 
 			try (OutputStream outputStream = Files.newOutputStream(dataPath))
 			{
@@ -572,10 +605,12 @@ public class GoblinKillTrackerPlugin extends Plugin
 		String importedLootDate = normalizeDateKey(properties.getProperty(EXPORT_LOOT_DATE_KEY), currentDateKey());
 		Map<Integer, Long> importedTodayLoot = deserializeLootTotals(properties.getProperty(EXPORT_TODAY_LOOT_KEY));
 		Map<Integer, Long> importedLifetimeLoot = deserializeLootTotals(properties.getProperty(EXPORT_LIFETIME_LOOT_KEY));
+		Map<Integer, Long> importedMilestoneTimes = deserializeLootTotals(properties.getProperty(EXPORT_MILESTONE_TIMES_KEY));
 
 		statsState.resetAll();
 		statsState.setLifetimeKills(importedLifetimeKills);
 		statsState.setLifetimeLootTotals(importedLifetimeLoot);
+		statsState.setMilestoneReachedAtMs(importedMilestoneTimes);
 
 		String currentDate = currentDateKey();
 		activeLootDate = currentDate;
@@ -593,6 +628,7 @@ public class GoblinKillTrackerPlugin extends Plugin
 			statsRepository.saveLifetimeKills(statsState.getLifetimeKills());
 			statsRepository.saveLifetimeLootTotals(statsState.getLifetimeLootTotals());
 			statsRepository.saveTodayLootTotals(activeLootDate, statsState.getTodayLootTotals());
+			statsRepository.saveMilestoneReachedAtMs(statsState.getMilestoneReachedAtMs());
 		}
 
 		killService.clear();

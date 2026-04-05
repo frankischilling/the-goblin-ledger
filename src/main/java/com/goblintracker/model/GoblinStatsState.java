@@ -19,6 +19,7 @@ public class GoblinStatsState
 	private final Map<String, Integer> areaKillCounts = new HashMap<>();
 	private final Map<Integer, Long> todayLootTotals = new HashMap<>();
 	private final Map<Integer, Long> lifetimeLootTotals = new HashMap<>();
+	private final Map<Integer, Long> milestoneReachedAtMs = new HashMap<>();
 	private final Deque<GoblinKillRecord> recentKills = new ArrayDeque<>();
 
 	public GoblinStatsState()
@@ -39,6 +40,7 @@ public class GoblinStatsState
 		areaKillCounts.clear();
 		todayLootTotals.clear();
 		lifetimeLootTotals.clear();
+		milestoneReachedAtMs.clear();
 		recentKills.clear();
 	}
 
@@ -57,6 +59,36 @@ public class GoblinStatsState
 	{
 		lifetimeLootTotals.clear();
 		mergeLoot(lifetimeLootTotals, lootTotals);
+	}
+
+	public void setMilestoneReachedAtMs(Map<Integer, Long> milestoneTimes)
+	{
+		milestoneReachedAtMs.clear();
+		if (milestoneTimes == null || milestoneTimes.isEmpty())
+		{
+			return;
+		}
+
+		for (Map.Entry<Integer, Long> entry : milestoneTimes.entrySet())
+		{
+			if (entry == null || entry.getKey() == null || entry.getValue() == null || entry.getKey() <= 0 || entry.getValue() <= 0L)
+			{
+				continue;
+			}
+
+			milestoneReachedAtMs.put(entry.getKey(), entry.getValue());
+		}
+	}
+
+	public boolean recordMilestoneReachedAt(int milestoneKills, long reachedAtMs)
+	{
+		if (milestoneKills <= 0 || reachedAtMs <= 0L || milestoneReachedAtMs.containsKey(milestoneKills))
+		{
+			return false;
+		}
+
+		milestoneReachedAtMs.put(milestoneKills, reachedAtMs);
+		return true;
 	}
 
 	public void incrementKill()
@@ -145,6 +177,11 @@ public class GoblinStatsState
 	public Map<Integer, Long> getLifetimeLootTotals()
 	{
 		return new HashMap<>(lifetimeLootTotals);
+	}
+
+	public Map<Integer, Long> getMilestoneReachedAtMs()
+	{
+		return new HashMap<>(milestoneReachedAtMs);
 	}
 
 	public List<GoblinKillRecord> getRecentKills()

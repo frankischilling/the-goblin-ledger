@@ -14,6 +14,7 @@ public class ConfigGoblinStatsRepository implements GoblinStatsRepository
 	private static final String LIFETIME_LOOT_TOTALS_KEY = "lifetimeLootTotals";
 	private static final String TODAY_LOOT_DATE_KEY = "todayLootDate";
 	private static final String TODAY_LOOT_TOTALS_KEY = "todayLootTotals";
+	private static final String MILESTONE_REACHED_AT_MS_KEY = "milestoneReachedAtMs";
 
 	private final ConfigManager configManager;
 
@@ -98,6 +99,25 @@ public class ConfigGoblinStatsRepository implements GoblinStatsRepository
 			GoblinKillTrackerPlugin.CONFIG_GROUP,
 			TODAY_LOOT_TOTALS_KEY,
 			serializeLootTotals(lootTotals));
+	}
+
+	@Override
+	public Map<Integer, Long> loadMilestoneReachedAtMs()
+	{
+		String serialized = configManager.getRSProfileConfiguration(
+			GoblinKillTrackerPlugin.CONFIG_GROUP,
+			MILESTONE_REACHED_AT_MS_KEY,
+			String.class);
+		return deserializeLootTotals(serialized);
+	}
+
+	@Override
+	public void saveMilestoneReachedAtMs(Map<Integer, Long> milestoneTimes)
+	{
+		configManager.setRSProfileConfiguration(
+			GoblinKillTrackerPlugin.CONFIG_GROUP,
+			MILESTONE_REACHED_AT_MS_KEY,
+			serializeLootTotals(milestoneTimes));
 	}
 
 	private static String serializeLootTotals(Map<Integer, Long> lootTotals)

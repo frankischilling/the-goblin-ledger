@@ -95,6 +95,9 @@ public class GoblinPanelTest
 		when(plugin.getLifetimeGoblinKills()).thenReturn(1200);
 		when(plugin.getSessionKillsPerHour()).thenReturn(300);
 		when(plugin.getActiveProfileName()).thenReturn("Frank");
+		when(plugin.getMilestoneReachedAtMs()).thenReturn(Map.of(
+			100, 1_700_000_000_000L,
+			1_000, 1_700_003_600_000L));
 		when(plugin.getAreaKillCounts()).thenReturn(Map.of());
 		when(plugin.getLootTotals()).thenReturn(Map.of());
 		when(plugin.getRecentKills()).thenReturn(List.of());
@@ -115,6 +118,7 @@ public class GoblinPanelTest
 		assertTrue(overview.contains("War title:"));
 		assertTrue(overview.contains("[x] 100 - First Blood"));
 		assertTrue(overview.contains("[x] 1,000 - Goblin Bane"));
+		assertTrue(overview.contains("(hit: "));
 		assertTrue(overview.contains("Next prophecy mark:"));
 		assertTrue(overview.contains("5,000"));
 		assertTrue(overview.contains("Village Scourge"));

@@ -15,8 +15,12 @@ import java.awt.Graphics;
 import java.awt.GridLayout;
 import java.awt.Insets;
 import java.awt.Rectangle;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -52,16 +56,20 @@ public class GoblinPanel extends PluginPanel
 {
 	private static final Logger log = LoggerFactory.getLogger(GoblinPanel.class);
 	private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss").withZone(ZoneId.systemDefault());
+	private static final DateTimeFormatter MILESTONE_HIT_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss").withZone(ZoneId.systemDefault());
 	private static final Font PANEL_FONT = new Font(Font.DIALOG, Font.PLAIN, 12);
 	private static final Font TAB_FONT = new Font(Font.DIALOG, Font.BOLD, 12);
 	private static final Font HEADER_FONT = new Font(Font.DIALOG, Font.BOLD, 15);
 	private static final Font SUBHEADER_FONT = new Font(Font.DIALOG, Font.BOLD, 12);
 	private static final Font WRITING_FONT = new Font(Font.DIALOG, Font.ITALIC, 12);
 	private static final Font BOOK_FONT = new Font(Font.SERIF, Font.PLAIN, 13);
+	private static final Font BOOK_FONT_COMPACT = new Font(Font.SERIF, Font.PLAIN, 12);
 	private static final Font TOC_FONT = new Font(Font.SERIF, Font.PLAIN, 12);
+	private static final Font TOC_FONT_COMPACT = new Font(Font.SERIF, Font.PLAIN, 11);
 	private static final int LABEL_WRAP_COLUMNS = 42;
 	private static final int AREA_WRAP_COLUMNS = 58;
 	private static final int BOOK_VIEWPORT_PREFERRED_HEIGHT = 520;
+	private static final int LORE_COMPACT_WIDTH_THRESHOLD = 240;
 
 	private final GoblinKillTrackerPlugin plugin;
 	private final JTabbedPane tabs = new JTabbedPane();
@@ -233,6 +241,14 @@ public class GoblinPanel extends PluginPanel
 		loreBookTab.add(loreBookTopPanel, BorderLayout.NORTH);
 		buildLoreSubTabs();
 		loreBookTab.add(loreSubTabs, BorderLayout.CENTER);
+		loreBookScrollPane.getViewport().addComponentListener(new ComponentAdapter()
+		{
+			@Override
+			public void componentResized(ComponentEvent event)
+			{
+				applyAdaptiveLoreStyling();
+			}
+		});
 	}
 
 	private void buildLoreSubTabs()
@@ -243,6 +259,7 @@ public class GoblinPanel extends PluginPanel
 		loreSubTabs.addChangeListener(e -> {
 			applyLoreSubTabSelectionColors();
 			applyPendingCanonScroll();
+			applyAdaptiveLoreStyling();
 		});
 		loreSubTabs.addTab("Chronicle", loreBookScrollPane);
 
@@ -254,6 +271,7 @@ public class GoblinPanel extends PluginPanel
 		}
 
 		refreshLoreUnlockTabs(0);
+		applyAdaptiveLoreStyling();
 	}
 
 	private String formatUnlockTabTitle(WarBranding.LoreUnlockEntry entry)
@@ -304,8 +322,8 @@ public class GoblinPanel extends PluginPanel
 		scrollPane.setHorizontalScrollBarPolicy(ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 		if (BOOK_FONT.equals(area.getFont()))
 		{
-			Dimension preferred = scrollPane.getPreferredSize();
-			scrollPane.setPreferredSize(new Dimension(preferred.width, BOOK_VIEWPORT_PREFERRED_HEIGHT));
+			scrollPane.setPreferredSize(new Dimension(0, BOOK_VIEWPORT_PREFERRED_HEIGHT));
+			scrollPane.setMinimumSize(new Dimension(0, 220));
 		}
 		int unitIncrement = area == loreBookArea ? 18 : 14;
 		int blockIncrement = area == loreBookArea ? 120 : 80;
@@ -342,12 +360,40 @@ public class GoblinPanel extends PluginPanel
 		JTextArea area = createReadOnlyArea();
 		area.setFont(BOOK_FONT);
 		area.setWrapStyleWord(true);
-		area.setMargin(new Insets(14, 16, 14, 16));
+		area.setMargin(new Insets(12, 12, 12, 12));
 		if (area.getCaret() instanceof DefaultCaret)
 		{
 			((DefaultCaret) area.getCaret()).setUpdatePolicy(DefaultCaret.NEVER_UPDATE);
 		}
 		return area;
+	}
+
+	private void applyAdaptiveLoreStyling()
+	{
+		int viewportWidth = loreBookScrollPane.getViewport().getWidth();
+		if (viewportWidth <= 0)
+		{
+			viewportWidth = loreSubTabs.getWidth();
+		}
+
+		boolean compact = viewportWidth > 0 && viewportWidth <= LORE_COMPACT_WIDTH_THRESHOLD;
+		Font bookFont = compact ? BOOK_FONT_COMPACT : BOOK_FONT;
+		Insets bookMargin = compact
+			? new Insets(8, 8, 10, 8)
+			: new Insets(12, 12, 12, 12);
+		loreBookArea.setFont(bookFont);
+		loreBookArea.setMargin(bookMargin);
+		for (JTextArea area : loreUnlockAreas.values())
+		{
+			area.setFont(bookFont);
+			area.setMargin(bookMargin);
+		}
+
+		Font tocFont = compact ? TOC_FONT_COMPACT : TOC_FONT;
+		for (JButton button : loreTocButtons.values())
+		{
+			button.setFont(tocFont);
+		}
 	}
 
 	private Map<String, JButton> createLoreTocButtons()
@@ -580,7 +626,7 @@ public class GoblinPanel extends PluginPanel
 		int sessionRate = plugin.getSessionKillsPerHour();
 		boolean showFlavorText = config == null || config.showFlavorText();
 		int flavorStride = config == null ? 25 : config.flavorLineStride();
-		List<String> unlockedMilestones = WarBranding.unlockedMilestones(lifetimeKills);
+		List<String> unlockedMilestones = buildUnlockedMilestoneLines(lifetimeKills, plugin.getMilestoneReachedAtMs());
 
 		StringBuilder text = new StringBuilder();
 		text.append("=== Campaign Summary ===\n");
@@ -626,6 +672,36 @@ public class GoblinPanel extends PluginPanel
 		}
 
 		return text.toString();
+	}
+
+	private static List<String> buildUnlockedMilestoneLines(int lifetimeKills, Map<Integer, Long> milestoneReachedAtMs)
+	{
+		int boundedKills = Math.max(0, lifetimeKills);
+		Map<Integer, Long> reachedAtMap = milestoneReachedAtMs == null ? Map.of() : milestoneReachedAtMs;
+		List<String> lines = new ArrayList<>();
+
+		for (int target : WarBranding.milestoneTargets())
+		{
+			if (boundedKills < target)
+			{
+				continue;
+			}
+
+			String line = "[x] " + String.format(Locale.US, "%,d", target) + " - " + WarBranding.milestoneTitle(target);
+			Long reachedAtMs = reachedAtMap.get(target);
+			if (reachedAtMs == null || reachedAtMs <= 0L)
+			{
+				line += " (hit: unknown)";
+			}
+			else
+			{
+				line += " (hit: " + MILESTONE_HIT_FORMATTER.format(Instant.ofEpochMilli(reachedAtMs)) + ")";
+			}
+
+			lines.add(line);
+		}
+
+		return lines;
 	}
 
 	private String buildAreasText()

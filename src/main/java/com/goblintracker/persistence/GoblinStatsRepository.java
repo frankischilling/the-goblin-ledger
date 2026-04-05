@@ -15,4 +15,8 @@ public interface GoblinStatsRepository
 	Map<Integer, Long> loadTodayLootTotals(String dateKey);
 
 	void saveTodayLootTotals(String dateKey, Map<Integer, Long> lootTotals);
+
+	Map<Integer, Long> loadMilestoneReachedAtMs();
+
+	void saveMilestoneReachedAtMs(Map<Integer, Long> milestoneTimes);
 }
