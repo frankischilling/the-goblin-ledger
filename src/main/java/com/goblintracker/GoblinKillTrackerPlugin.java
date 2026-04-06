@@ -750,16 +750,8 @@ public class GoblinKillTrackerPlugin extends Plugin
 		statsState.setLifetimeLootTotals(importedLifetimeLoot);
 		statsState.setMilestoneReachedAtMs(importedMilestoneTimes);
 
-		String currentDate = currentDateKey();
-		activeLootDate = currentDate;
-		if (Objects.equals(importedLootDate, currentDate))
-		{
-			statsState.setTodayLootTotals(importedTodayLoot);
-		}
-		else
-		{
-			statsState.setTodayLootTotals(Map.of());
-		}
+		activeLootDate = importedLootDate;
+		statsState.setTodayLootTotals(importedTodayLoot);
 
 		if (hasActiveProfile())
 		{

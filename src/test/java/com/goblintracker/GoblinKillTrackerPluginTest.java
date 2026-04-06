@@ -20,6 +20,7 @@ import com.goblintracker.ui.GoblinPanel;
 import java.lang.reflect.Field;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Properties;
 import java.util.Map;
 import org.junit.Before;
 import org.junit.Test;
@@ -383,6 +384,35 @@ public class GoblinKillTrackerPluginTest
 
 		assertTrue(plugin.importDataFromPath(tempExport));
 		assertEquals(21, plugin.getLifetimeGoblinKills());
+
+		Files.deleteIfExists(tempExport);
+	}
+
+	@Test
+	public void importPreservesPersistedTodayLootBucketFromExportedDate() throws Exception
+	{
+		Path tempExport = Files.createTempFile("goblin-ledger-import-today-loot", ".properties");
+		Properties export = new Properties();
+		export.setProperty("version", "1");
+		export.setProperty("lifetimeKills", "42");
+		export.setProperty("lootDate", "1999-12-31");
+		export.setProperty("todayLootTotals", "526:7,995:3");
+		export.setProperty("lifetimeLootTotals", "526:70,995:30");
+		export.setProperty("milestoneReachedAtMs", "100:1700000000000");
+		export.setProperty("dailyKillCounts", "1999-12-31:42");
+		export.setProperty("areaKillCounts", "THVtYnJpZGdl:42");
+		try (java.io.OutputStream out = Files.newOutputStream(tempExport))
+		{
+			export.store(out, "test");
+		}
+
+		plugin.startUp();
+
+		assertTrue(plugin.importDataFromPath(tempExport));
+		assertEquals(42, plugin.getLifetimeGoblinKills());
+		assertEquals(7L, (long) plugin.getTodayLootTotals().getOrDefault(526, 0L));
+		assertEquals(3L, (long) plugin.getTodayLootTotals().getOrDefault(995, 0L));
+		verify(statsRepository).saveTodayLootTotals("1999-12-31", Map.of(526, 7L, 995, 3L));
 
 		Files.deleteIfExists(tempExport);
 	}
